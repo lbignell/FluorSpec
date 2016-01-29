@@ -22,14 +22,38 @@ class FluorSpecReader():
                  'emcorr-sphere':'correction_data\\emcorr-sphere.txt',
                  'emcorr-sphere-quanta':'correction_data\\emcorr-sphere-quanta.txt',
                  'excorr':'correction_data\\excorr.txt'}    
+
     def __init__(self):
-        #Initialize parameters
-        print("Initializing!")
+        pass
+
     def GetCorrData(self, key):
         '''
         Return spectral correction data object.
         
         key may be: 'emcorri', 'emcorr-sphere', 'emcorr-sphere-quanta', or 'excorr'.
         '''
+        if key not in self.CorrFiles:
+            print('ERROR!! Incorrect choice of correction file.')
+            return
         return PTI_Data.PTI_Data(self.CorrFiles[key])
-    
+
+    def ApplyCorrFileToRaw(self, rawspec, data, key):
+        '''
+        Take raw data as input and return the corrected spectrum.
+        
+        Arguments:
+        Raw spectrum as list.
+        PTI_Data object for data.
+        key may be 'emcorri', 'emcorr-sphere', 'emcorr-sphere-quanta', or 'excorr'.
+        '''
+        corr = self.GetCorrData(key)
+        if corr is None:
+            print('Not correcting data.')
+            return
+        if data.RunType.value!=corr.RunType.value:
+                print('ERROR!! The correction type doesn\'t match the data type.')
+                return
+        CorrVals = np.interp(data.WL, corr.WL, corr.Trace, left=0, right=0)
+        CorrData = np.multiply(rawspec, CorrVals)
+        return CorrData
+

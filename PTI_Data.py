@@ -14,6 +14,10 @@ class PTI_Data:
     def __init__(self, fname):
         #Get the file as an object.
         self.FilePath = fname
+        if not os.path.exists(fname):
+            print("ERROR!! File does not exist.")
+            self.SuccessfullyRead = False            
+            return
         with file(self.FilePath, 'r') as thefile:
             firstline = thefile.readline()
             if '<Session>' in firstline:
@@ -172,7 +176,8 @@ class PTI_Data:
                     self.Spec[i-8] = float(wrds[3])
                 elif i > (8 + self.NumSamples + 7) and \
                    i < (8 + self.NumSamples + 7 + self.NumSamples):
-                    self.ExCorr[i-(8+self.NumSamples+7)] = float(wrds[1])
+                    wrds = line.split()
+                    self.ExCorr[i-(8+self.NumSamples+7)] += float(wrds[1])
         return
 
     def _ReadTraceData(self):
