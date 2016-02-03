@@ -149,8 +149,8 @@ class FluorSpecReader():
         QY = N_emitted/(N_Tot_empty - N_Tot_sample)
         QY = QY/(1- w + w*QY)
         if verbose:
-            print("# emitted = {0}, # tot (no sample) = {1}, # tot (sample) = {2}, QY = {3}".format(
-            N_emitted, N_Tot_empty, N_Tot_sample, QY))
+            print("Quantum Yield: \n # emitted = {0}, # tot (no sample) = {1}, # tot (sample) = {2}, QY = {3}".format(
+                N_emitted, N_Tot_empty, N_Tot_sample, QY))
             plt.figure()        
             plt.plot(fluor.WL, corrspec_fluor, 'b', label='fluor spec')
             plt.plot(solvent.WL, corrspec_solvent, 'r', label='solvent spec')
@@ -164,7 +164,7 @@ class FluorSpecReader():
 
     def CalcStraightLine(self, WL, spec, startidx, endidx):
         gradient = (np.mean(spec[endidx+1:endidx+6]) - \
-            np.mean(spec[startidx-6:startidx-1]))/(endidx - startidx)
+            np.mean(spec[startidx-6:startidx-1]))/(WL[endidx] - WL[startidx])
         const = spec[endidx] - gradient*WL[endidx]
         return np.add(np.multiply(WL,gradient),const)
 
@@ -193,7 +193,7 @@ class FluorSpecReader():
         integ_Dilute = sum(np.divide(corrspec_dilute[StartIdx_Dilute:EndIdx_Dilute],
                                      corrspec_dilute[normWL]))
         if verbose:
-            print("Reabsorption calculation.\n Sphere integral = {0}, Dilute integral = {1}, 1-w = {2}, w = {3}".format(
+            print("Reabsorption calculation:\n Sphere integral = {0}, Dilute integral = {1}, 1-w = {2}, w = {3}".format(
                     integ_Sphere, integ_Dilute, integ_Sphere/integ_Dilute, 1-(integ_Sphere/integ_Dilute)))
             plt.figure()
             plt.plot(sphere.WL[StartIdx_Sphere:EndIdx_Sphere], np.divide(
