@@ -28,7 +28,7 @@ class FluorSpecReader():
                  'default':None}    
 
     def __init__(self):
-        print("Initializing FluorSpecReader at {0}".format(time.time()))
+        print("Initializing FluorSpecReader at {0}".format(time.asctime(time.localtime())))
         pass
 
     def GetCorrData(self, key):
@@ -42,7 +42,7 @@ class FluorSpecReader():
             return
         return PTI_Data.PTI_Data(self.CorrFiles[key])
 
-    def ApplyCorrFileToRaw(self, rawspec, data, key, bckgnd=0, extracorr=None, MakePlots=False):
+    def ApplyCorrFileToRaw(self, data, key, bckgnd=0, extracorr=None, MakePlots=False):
         '''
         Take raw data as input and return the corrected spectrum.
         
@@ -77,10 +77,11 @@ class FluorSpecReader():
             CorrVals = np.interp(data.WL, corr.WL, corr.Trace, left=0, right=0)
         else:
             CorrVals = [1 for i in len(rawspec)]
+            
         CorrData = np.multiply(np.subtract(rawspec, bckgnd),
                                CorrVals)
-        Ubckgnd = map(math.sqrt,bckgnd)
-        UCorrData = np.multiply(np.sqrt(np.sum(np.power(uspec,2),
+        Ubckgnd = np.sqrt(bckgnd)
+        UCorrData = np.multiply(np.sqrt(np.add(np.power(uspec,2),
                                                np.power(Ubckgnd,2))),
                                 CorrVals)
         if MakePlots and extracorr is None:
@@ -94,8 +95,16 @@ class FluorSpecReader():
             if extracorr.RunType.name!='Synchronous':
                 print('ERROR!! The extracorr run type is not synchronous!')
                 return
-            CorrVals = np.interp(data.WL, extracorr.WL, extracorr.Spec)
-            CorrData = np.divide(CorrData,CorrVals)
+            #The mess below corrects for the measured difference between the sphere
+            #response and the file correction, as well as its uncertainty.
+            extracorr_vals = np.interp(data.WL, extracorr.WL, extracorr.Spec)
+            CorrData_extracorr = np.divide(CorrData,extracorr_vals)
+            Raw_extracorr = np.interp(data.WL, extracorr.WL, extracorr.SpecRaw)
+            URaw_extracorr = np.sqrt(Raw_extracorr)
+            Uextracorr = np.multiply(extracorr_vals,np.divide(URaw_extracorr, Raw_extracorr))
+            UCorrData = np.sqrt(np.add(np.power(np.multiply(np.divide(1,extracorr_vals), UCorrData),2),
+                               np.power(np.multiply(np.divide(CorrData_extracorr,extracorr_vals), Uextracorr),2)))
+            CorrData = CorrData_extracorr
             if MakePlots:
                 plt.figure()
                 plt.plot(data.WL, rawspec, label='Raw Data')
@@ -104,7 +113,7 @@ class FluorSpecReader():
                          label='Corrected with Sync Scan file {0}'.format(
                          extracorr.FilePath))
                 plt.legend()
-        return CorrData
+        return CorrData, UCorrData
     
     def CalculateQY_2MM(self, corrspec_fluor, corrspec_solvent, fluor, solvent,
                         scat_start, scat_end, em_start, em_end, use_solvent_BL=False,

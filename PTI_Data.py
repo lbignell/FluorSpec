@@ -12,6 +12,7 @@ class PTI_Data:
     RunTypes = Enum('RunType', 'Unknown Emission Excitation Synchronous')
     FileTypes = Enum('FileType', 'Unknown Session Trace Group')
     def __init__(self, fname):
+        print("Initializing PTI_Data at {0}".format(time.asctime(time.localtime())))
         #Get the file as an object.
         self.FilePath = fname
         if not os.path.exists(fname):
@@ -44,6 +45,16 @@ class PTI_Data:
             self.UTrace = [0]*self.NumSamples
         
         self.ReadSpecData()
+        self.SpecCorrected = None
+        self.USpecCorrected = None
+        return
+
+    def RegisterCorrSpec(self, CorrSpec, UCorrSpec):
+        '''
+        Define the SpecCorrected and USpecCorrected members.
+        '''
+        self.SpecCorrected = CorrSpec
+        self.USpecCorrected = UCorrSpec
         return
 
     def ReadHeaderInfo(self):
@@ -175,7 +186,7 @@ class PTI_Data:
                     wrds = line.split()
                     self.WL[i-8] = float(wrds[0])
                     self.SpecRaw[i-8] = float(wrds[1])
-                    self.USpecRaw[i-8] = float(wrds[1])**(0.5)
+                    self.USpecRaw[i-8] = abs(float(wrds[1]))**(0.5)
                     self.Spec[i-8] = float(wrds[3])
                 elif i > (8 + self.NumSamples + 7) and \
                    i < (8 + self.NumSamples + 7 + self.NumSamples):
@@ -190,7 +201,7 @@ class PTI_Data:
                     wrds = line.split()
                     self.WL[i-4] = float(wrds[0])
                     self.Trace[i-4] = float(wrds[1])
-                    self.UTrace[i-4] = float(wrds[1])**(0.5)
+                    self.UTrace[i-4] = abs(float(wrds[1]))**(0.5)
         return
 
     def _ReadGroupData(self):
@@ -200,5 +211,5 @@ class PTI_Data:
                     wrds = line.split()
                     self.WL[i-6] = float(wrds[0])
                     self.Trace[i-6] = float(wrds[1])
-                    self.UTrace[i-6] = float(wrds[1])**(0.5)
+                    self.UTrace[i-6] = abs(float(wrds[1]))**(0.5)
         return
