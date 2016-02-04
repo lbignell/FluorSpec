@@ -109,10 +109,10 @@ class FluorSpecReader():
         - corrected spectrum and PTI_Data object for a dilute fluor spec (for reabsorption correction).
         - flag to print info to console and create a plot.
         '''
-        ScatStartIdx_Fluor = fluor.WL.index(np.interp(scat_start, fluor.WL, fluor.WL))
-        ScatEndIdx_Fluor = fluor.WL.index(np.interp(scat_end, fluor.WL, fluor.WL))
         ScatStartIdx_Solvent = solvent.WL.index(np.interp(scat_start, solvent.WL, solvent.WL))
         ScatEndIdx_Solvent = solvent.WL.index(np.interp(scat_end, solvent.WL, solvent.WL))
+        ScatStartIdx_Fluor = fluor.WL.index(np.interp(scat_start, fluor.WL, fluor.WL))
+        ScatEndIdx_Fluor = fluor.WL.index(np.interp(scat_end, fluor.WL, fluor.WL))
         EmStartIdx_Fluor = fluor.WL.index(np.interp(em_start, fluor.WL, fluor.WL))
         EmEndIdx_Fluor = fluor.WL.index(np.interp(em_end, fluor.WL, fluor.WL))
         #Calculate baselines
@@ -121,9 +121,9 @@ class FluorSpecReader():
                                               ScatStartIdx_Fluor,
                                               ScatEndIdx_Fluor)
         Scat_BL_Solvent = self.CalcStraightLine(solvent.WL,
-                                                corrspec_solvent,
-                                                ScatStartIdx_Solvent,
-                                                ScatEndIdx_Solvent)
+                                              corrspec_solvent,
+                                              ScatStartIdx_Solvent,
+                                              ScatEndIdx_Solvent)
         if use_solvent_BL:
             #do it assuming same WL range for now.
             Em_BL_Fluor = corrspec_solvent
@@ -160,12 +160,23 @@ class FluorSpecReader():
             plt.legend()
             plt.xlabel('Wavelength (nm)')
             plt.ylabel('Fluorescence Intensity (AU)')
+            plt.figure()
+            plt.plot(solvent.WL[ScatStartIdx_Solvent:ScatEndIdx_Solvent], np.subtract(corrspec_solvent[ScatStartIdx_Solvent:ScatEndIdx_Solvent],
+                                      Scat_BL_Solvent[ScatStartIdx_Solvent:ScatEndIdx_Solvent]), 'r', label='solvent spec')
+            plt.plot(fluor.WL[ScatStartIdx_Fluor:ScatEndIdx_Fluor], np.subtract(corrspec_fluor[ScatStartIdx_Fluor:ScatEndIdx_Fluor],
+                                      Scat_BL_Fluor[ScatStartIdx_Fluor:ScatEndIdx_Fluor]), 'b', label='fluor spec, scatter')
+            plt.plot(fluor.WL[EmStartIdx_Fluor:EmEndIdx_Fluor], np.subtract(corrspec_fluor[EmStartIdx_Fluor:EmEndIdx_Fluor],
+                                    Em_BL_Fluor[EmStartIdx_Fluor:EmEndIdx_Fluor]), 'g', label='fluor spec, emission')
+            plt.plot((fluor.WL[ScatStartIdx_Fluor],fluor.WL[EmEndIdx_Fluor]), (0,0), 'k')
         return QY
 
     def CalcStraightLine(self, WL, spec, startidx, endidx):
-        gradient = (np.mean(spec[endidx+1:endidx+6]) - \
-            np.mean(spec[startidx-6:startidx-1]))/(WL[endidx] - WL[startidx])
-        const = spec[endidx] - gradient*WL[endidx]
+        gradient = (np.mean(spec[(endidx):(endidx+6)]) - np.mean(spec[(startidx-6):(startidx)]))/(WL[endidx+3] - WL[startidx-3])
+        #print('spec[(endidx):(endidx+6)] = {0}, spec[(startidx):(startidx-6)] = {1}, WL[endidx+3] = {2}, WL[startidx-3] = {3}'.format(
+         #   spec[(endidx):(endidx+6)], spec[(startidx):(startidx-6)], WL[endidx+3], WL[startidx-3]))
+        #gradient = (spec[endidx]-spec[startidx])/(WL[endidx] - WL[startidx])
+        const = np.mean(spec[endidx:(endidx+6)]) - gradient*WL[endidx]
+        #print('gradient = {0}, constant = {1}'.format(gradient, const))
         return np.add(np.multiply(WL,gradient),const)
 
     def CalcReabsProb(self, corrspec_sphere, sphere, em_start, em_end, normWL,
