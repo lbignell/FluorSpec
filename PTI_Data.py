@@ -37,9 +37,11 @@ class PTI_Data:
         if self.FileType == self.FileTypes.Session:
             self.Spec = [0]*self.NumSamples
             self.SpecRaw = [0]*self.NumSamples
+            self.USpecRaw = [0]*self.NumSamples
             self.ExCorr = [0]*self.NumSamples #Note ExCorr here is the photodiode signal.
         elif self.FileType.value > 1:
             self.Trace = [0]*self.NumSamples
+            self.UTrace = [0]*self.NumSamples
         
         self.ReadSpecData()
         return
@@ -173,6 +175,7 @@ class PTI_Data:
                     wrds = line.split()
                     self.WL[i-8] = float(wrds[0])
                     self.SpecRaw[i-8] = float(wrds[1])
+                    self.USpecRaw[i-8] = float(wrds[1])**(0.5)
                     self.Spec[i-8] = float(wrds[3])
                 elif i > (8 + self.NumSamples + 7) and \
                    i < (8 + self.NumSamples + 7 + self.NumSamples):
@@ -187,6 +190,7 @@ class PTI_Data:
                     wrds = line.split()
                     self.WL[i-4] = float(wrds[0])
                     self.Trace[i-4] = float(wrds[1])
+                    self.UTrace[i-4] = float(wrds[1])**(0.5)
         return
 
     def _ReadGroupData(self):
@@ -196,4 +200,5 @@ class PTI_Data:
                     wrds = line.split()
                     self.WL[i-6] = float(wrds[0])
                     self.Trace[i-6] = float(wrds[1])
+                    self.UTrace[i-6] = float(wrds[1])**(0.5)
         return

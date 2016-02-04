@@ -12,6 +12,7 @@ from enum import Enum
 import PTI_Data
 import matplotlib.pyplot as plt
 import time
+import math
 
 class FluorSpecReader():
     '''
@@ -49,12 +50,21 @@ class FluorSpecReader():
         Raw spectrum as list.
         PTI_Data object for data.
         key may be 'emcorri', 'emcorr-sphere', 'emcorr-sphere-quanta', or 'excorr'.
-        bckgnd is the background to be subtracted from the raw data.
+        bckgnd is the background (list) to be subtracted from the raw data.
         extracorr is an optional argument to apply an extra correction (to be divided)
         using synchronous scan data in the form of a PTI_Data object.
         Be sure that the right correction that was applied to the synchronous scan is
         the same as the key argument.
         '''
+        if data.FileType.value > 1:
+            rawspec = data.Trace
+            uspec = data.UTrace
+        elif data.FileType.value == 1:
+            rawspec = data.SpecRaw
+            uspec = data.USpecRaw
+        else:
+            print("Analyse.ApplyCorrFileToRaw ERROR!! Bad file")
+            return
         CorrData = None
         if key is not 'default':
             corr = self.GetCorrData(key)
@@ -65,9 +75,14 @@ class FluorSpecReader():
                 print('ERROR!! The correction type doesn\'t match the data type.')
                 return
             CorrVals = np.interp(data.WL, corr.WL, corr.Trace, left=0, right=0)
-            CorrData = np.multiply(np.subtract(rawspec, bckgnd), CorrVals)
         else:
-            CorrData = np.subtract(rawspec,bckgnd)
+            CorrVals = [1 for i in len(rawspec)]
+        CorrData = np.multiply(np.subtract(rawspec, bckgnd),
+                               CorrVals)
+        Ubckgnd = map(math.sqrt,bckgnd)
+        UCorrData = np.multiply(np.sqrt(np.sum(np.power(uspec,2),
+                                               np.power(Ubckgnd,2))),
+                                CorrVals)
         if MakePlots and extracorr is None:
             #Plot the raw data.
             plt.figure()
