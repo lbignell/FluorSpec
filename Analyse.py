@@ -113,11 +113,11 @@ class FluorSpecReader():
                          label='Corrected with Sync Scan file {0}'.format(
                          extracorr.FilePath))
                 plt.legend()
+        data.RegisterCorrSpec(CorrData,UCorrData)
         return CorrData, UCorrData
     
-    def CalculateQY_2MM(self, corrspec_fluor, corrspec_solvent, fluor, solvent,
-                        scat_start, scat_end, em_start, em_end, use_solvent_BL=False,
-                        corrspec_dilute=None, dilute=None, normWL=None, verbose=False):
+    def CalculateQY_2MM(self, fluor, solvent, scat_start, scat_end, em_start, em_end, use_solvent_BL=False,
+                        dilute=None, normWL=None, verbose=False):
         '''
         Calculate QY using 2 measurement method.
 
@@ -125,9 +125,7 @@ class FluorSpecReader():
         the start and end of the integration ranges.
         
         Arguments:
-        - corrected spectrum for fluorophore and solvent as lists, obtained with
-        ApplyCorrFileToRaw.
-        - the PTI_Data objects for the fluorophore and solvent
+        - the PTI_Data objects for the fluorophore and solvent. Note that the correction has to be registered.
         - the integration ranges for the scatter peak and emission spectrum.
         - optionally use the solvent spectrum for the fluorescence baseline corr.
         - corrected spectrum and PTI_Data object for a dilute fluor spec (for reabsorption correction).
@@ -141,58 +139,85 @@ class FluorSpecReader():
         EmEndIdx_Fluor = fluor.WL.index(np.interp(em_end, fluor.WL, fluor.WL))
         #Calculate baselines
         Scat_BL_Fluor = self.CalcStraightLine(fluor.WL,
-                                              corrspec_fluor,
+                                              fluor.SpecCorrected,
                                               ScatStartIdx_Fluor,
                                               ScatEndIdx_Fluor)
         Scat_BL_Solvent = self.CalcStraightLine(solvent.WL,
-                                              corrspec_solvent,
+                                              solvent.SpecCorrected,
                                               ScatStartIdx_Solvent,
                                               ScatEndIdx_Solvent)
         if use_solvent_BL:
             #do it assuming same WL range for now.
-            Em_BL_Fluor = corrspec_solvent
+            Em_BL_Fluor = solvent.SpecCorrected
         else:
             Em_BL_Fluor = self.CalcStraightLine(fluor.WL,
-                                                corrspec_fluor,
+                                                fluor.SpecCorrected,
                                                 EmStartIdx_Fluor,
                                                 EmEndIdx_Fluor)
 
-        N_emitted = sum(np.subtract(corrspec_fluor[EmStartIdx_Fluor:EmEndIdx_Fluor],
+        N_emitted = sum(np.subtract(fluor.SpecCorrected[EmStartIdx_Fluor:EmEndIdx_Fluor],
                                     Em_BL_Fluor[EmStartIdx_Fluor:EmEndIdx_Fluor]))
-        N_Tot_empty = sum(np.subtract(corrspec_solvent[ScatStartIdx_Solvent:ScatEndIdx_Solvent],
+        UN_emitted = np.sqrt(sum(np.power(fluor.USpecCorrected[EmStartIdx_Fluor:EmEndIdx_Fluor],2)))
+        N_Tot_empty = sum(np.subtract(solvent.SpecCorrected[ScatStartIdx_Solvent:ScatEndIdx_Solvent],
                                       Scat_BL_Solvent[ScatStartIdx_Solvent:ScatEndIdx_Solvent]))
-        N_Tot_sample = sum(np.subtract(corrspec_fluor[ScatStartIdx_Fluor:ScatEndIdx_Fluor],
+        UN_Tot_empty = np.sqrt(sum(np.power(solvent.USpecCorrected[ScatStartIdx_Solvent:ScatEndIdx_Solvent],2)))
+        N_Tot_sample = sum(np.subtract(fluor.SpecCorrected[ScatStartIdx_Fluor:ScatEndIdx_Fluor],
                                        Scat_BL_Fluor[ScatStartIdx_Fluor:ScatEndIdx_Fluor]))
-        if((corrspec_dilute is not None) and (dilute is not None)) and (normWL is not None):
-            w = self.CalcReabsProb(corrspec_fluor, fluor, em_start, em_end,
+        UN_Tot_sample = np.sqrt(sum(np.power(fluor.USpecCorrected[ScatStartIdx_Fluor:ScatEndIdx_Fluor],2)))
+        if((dilute.SpecCorrected is not None) and (dilute is not None)) and (normWL is not None):
+            w, Uw = self.CalcReabsProb(fluor, em_start, em_end,
                                    dilute.WL.index(np.interp(normWL, dilute.WL, dilute.WL)),
-                                   Em_BL_Fluor, corrspec_dilute, dilute, verbose)
+                                   Em_BL_Fluor, dilute, verbose)
         else:
             w = 0
+            Uw = 0
 
         QY = N_emitted/(N_Tot_empty - N_Tot_sample)
-        QY = QY/(1- w + w*QY)
+        UQY = np.sqrt((1/(N_Tot_empty-N_Tot_sample)**2)*(UN_emitted**2) + 
+                      ((QY/(N_Tot_empty-N_Tot_sample))**2)*(UN_Tot_empty**2 + UN_Tot_sample**2))
+        QY_w = QY/(1- w + w*QY)
+        UQY = np.sqrt(((QY_w/QY)**2)*(UQY**2) +
+                      (((1-QY)*QY_w/(1-w+w*QY))**2)*(Uw**2))
+        QY = QY_w
         if verbose:
-            print("Quantum Yield: \n # emitted = {0}, # tot (no sample) = {1}, # tot (sample) = {2}, QY = {3}".format(
-                N_emitted, N_Tot_empty, N_Tot_sample, QY))
+            print("Quantum Yield: \n # emitted = {0} +/- {1}, \
+            # tot (no sample) = {2} +/- {3}, \
+            # tot (sample) = {4} +/- {5}, \
+            QY = {6} +/- {7}".format(
+                N_emitted, UN_emitted, N_Tot_empty, UN_Tot_empty, N_Tot_sample, UN_Tot_sample, QY, UQY))
             plt.figure()        
-            plt.plot(fluor.WL, corrspec_fluor, 'b', label='fluor spec')
-            plt.plot(solvent.WL, corrspec_solvent, 'r', label='solvent spec')
+            plt.errorbar(fluor.WL, fluor.SpecCorrected, yerr=fluor.USpecCorrected, color='b', label='fluor spec')
+            plt.errorbar(solvent.WL, solvent.SpecCorrected, yerr=solvent.USpecCorrected, color='r', label='solvent spec')
             plt.plot(fluor.WL, Scat_BL_Fluor, 'g', label='fluor scattering baseline')
             plt.plot(fluor.WL, Em_BL_Fluor, 'c', label='fluor emission baseline')
             plt.plot(solvent.WL, Scat_BL_Solvent, 'm', label='solvent scattering baseline')
             plt.legend()
             plt.xlabel('Wavelength (nm)')
             plt.ylabel('Fluorescence Intensity (AU)')
+            plt.title('file: ' + str(fluor.FilePath.split('\\')[-1]) +
+                '\n Excitation' + str(fluor.ExRange) +
+                ' nm, Emission ' + str(fluor.EmRange) + ' nm')
             plt.figure()
-            plt.plot(solvent.WL[ScatStartIdx_Solvent:ScatEndIdx_Solvent], np.subtract(corrspec_solvent[ScatStartIdx_Solvent:ScatEndIdx_Solvent],
-                                      Scat_BL_Solvent[ScatStartIdx_Solvent:ScatEndIdx_Solvent]), 'r', label='solvent spec')
-            plt.plot(fluor.WL[ScatStartIdx_Fluor:ScatEndIdx_Fluor], np.subtract(corrspec_fluor[ScatStartIdx_Fluor:ScatEndIdx_Fluor],
-                                      Scat_BL_Fluor[ScatStartIdx_Fluor:ScatEndIdx_Fluor]), 'b', label='fluor spec, scatter')
-            plt.plot(fluor.WL[EmStartIdx_Fluor:EmEndIdx_Fluor], np.subtract(corrspec_fluor[EmStartIdx_Fluor:EmEndIdx_Fluor],
-                                    Em_BL_Fluor[EmStartIdx_Fluor:EmEndIdx_Fluor]), 'g', label='fluor spec, emission')
+            plt.errorbar(solvent.WL[ScatStartIdx_Solvent:ScatEndIdx_Solvent], np.subtract(solvent.SpecCorrected[ScatStartIdx_Solvent:ScatEndIdx_Solvent],
+                                                                                          Scat_BL_Solvent[ScatStartIdx_Solvent:ScatEndIdx_Solvent]),
+                         yerr=solvent.USpecCorrected[ScatStartIdx_Solvent:ScatEndIdx_Solvent],
+                         color='r', label='solvent spec')
+            plt.errorbar(fluor.WL[ScatStartIdx_Fluor:ScatEndIdx_Fluor], np.subtract(fluor.SpecCorrected[ScatStartIdx_Fluor:ScatEndIdx_Fluor],
+                                                                                    Scat_BL_Fluor[ScatStartIdx_Fluor:ScatEndIdx_Fluor]),
+                         yerr=fluor.USpecCorrected[ScatStartIdx_Fluor:ScatEndIdx_Fluor],
+                         color='b', label='fluor spec, scatter')
+            plt.errorbar(fluor.WL[EmStartIdx_Fluor:EmEndIdx_Fluor], np.subtract(fluor.SpecCorrected[EmStartIdx_Fluor:EmEndIdx_Fluor],
+                                                                                Em_BL_Fluor[EmStartIdx_Fluor:EmEndIdx_Fluor]),
+                         yerr=fluor.USpecCorrected[EmStartIdx_Fluor:EmEndIdx_Fluor],
+                         color='g', label='fluor spec, emission')
             plt.plot((fluor.WL[ScatStartIdx_Fluor],fluor.WL[EmEndIdx_Fluor]), (0,0), 'k')
-        return QY
+            plt.legend()
+            plt.xlabel('Wavelength (nm)')
+            plt.ylabel('Fluorescence Intensity (AU)')
+            plt.title('file: ' + str(fluor.FilePath.split('\\')[-1]) +
+                '\n Excitation' + str(fluor.ExRange) +
+                ' nm, Emission ' + str(fluor.EmRange) + ' nm')
+        return QY, UQY
 
     def CalcStraightLine(self, WL, spec, startidx, endidx):
         gradient = (np.mean(spec[(endidx):(endidx+6)]) - np.mean(spec[(startidx-6):(startidx)]))/(WL[endidx+3] - WL[startidx-3])
@@ -203,8 +228,8 @@ class FluorSpecReader():
         #print('gradient = {0}, constant = {1}'.format(gradient, const))
         return np.add(np.multiply(WL,gradient),const)
 
-    def CalcReabsProb(self, corrspec_sphere, sphere, em_start, em_end, normWL,
-                      Em_BL_Fluor, corrspec_dilute, dilute, verbose=False):
+    def CalcReabsProb(self, sphere, em_start, em_end, normWL,
+                      Em_BL_Fluor, dilute, verbose=False):
         '''
         Calculate the reabsorption probability (necessary correction).
         
@@ -222,25 +247,34 @@ class FluorSpecReader():
         EndIdx_Sphere = sphere.WL.index(np.interp(em_end, sphere.WL, sphere.WL))
         StartIdx_Dilute = dilute.WL.index(np.interp(em_start, dilute.WL, dilute.WL))
         EndIdx_Dilute = dilute.WL.index(np.interp(em_end, dilute.WL, dilute.WL))
-        spherespec = np.subtract(corrspec_sphere, Em_BL_Fluor)
+        spherespec = np.subtract(sphere.SpecCorrected, Em_BL_Fluor)
         integ_Sphere = sum(np.divide(spherespec[StartIdx_Sphere:EndIdx_Sphere],
                                      spherespec[normWL]))
-        integ_Dilute = sum(np.divide(corrspec_dilute[StartIdx_Dilute:EndIdx_Dilute],
-                                     corrspec_dilute[normWL]))
+        Uinteg_sphere = np.sqrt(sum(np.power(np.divide(spherespec[StartIdx_Sphere:EndIdx_Sphere],
+                                                       spherespec[normWL]),2)))
+        integ_Dilute = sum(np.divide(dilute.SpecCorrected[StartIdx_Dilute:EndIdx_Dilute],
+                                     dilute.SpecCorrected[normWL]))
+        Uinteg_Dilute = np.sqrt(sum(np.power(np.divide(dilute.SpecCorrected[StartIdx_Sphere:EndIdx_Sphere],
+                                                       dilute.SpecCorrected[normWL]),2)))
+        w = 1 - (integ_Sphere/integ_Dilute)
+        Uw = np.sqrt((1/(integ_Dilute**2))*(Uinteg_sphere**2) +
+                    ((integ_Sphere/(integ_Dilute**2))**2)*(Uinteg_Dilute**2))
         if verbose:
-            print("Reabsorption calculation:\n Sphere integral = {0}, Dilute integral = {1}, 1-w = {2}, w = {3}".format(
-                    integ_Sphere, integ_Dilute, integ_Sphere/integ_Dilute, 1-(integ_Sphere/integ_Dilute)))
+            print("Reabsorption calculation:\n Sphere integral = {0}, Dilute integral = {1}, 1-w = {2}, w = {3} +/- {4}".format(
+                    integ_Sphere, integ_Dilute, 1-w, w, Uw))
             plt.figure()
-            plt.plot(sphere.WL[StartIdx_Sphere:EndIdx_Sphere], np.divide(
+            plt.errorbar(sphere.WL[StartIdx_Sphere:EndIdx_Sphere], np.divide(
                 spherespec[StartIdx_Sphere:EndIdx_Sphere],spherespec[normWL]),
-                'g', label='QY spectrum (with reabsorption)')
-            plt.plot(dilute.WL[StartIdx_Dilute:EndIdx_Dilute], np.divide(
-                corrspec_dilute[StartIdx_Dilute:EndIdx_Dilute], corrspec_dilute[normWL]),
-                'r', label='Dilute spectrum (no reabsorption)')
+                yerr=np.divide(sphere.USpecCorrected[StartIdx_Sphere:EndIdx_Sphere],spherespec[normWL]),
+                color='g', label='QY spectrum (with reabsorption)')
+            plt.errorbar(dilute.WL[StartIdx_Dilute:EndIdx_Dilute], np.divide(
+                dilute.SpecCorrected[StartIdx_Dilute:EndIdx_Dilute], dilute.SpecCorrected[normWL]),
+                yerr=np.divide(dilute.USpecCorrected[StartIdx_Dilute:EndIdx_Dilute],dilute.SpecCorrected[normWL]),
+                color='r', label='Dilute spectrum (no reabsorption)')
             plt.legend(fontsize=12)
             plt.title('file: ' + str(sphere.FilePath.split('\\')[-1]) +
                 '\n Excitation' + str(sphere.ExRange) +
                 ' nm, Emission ' + str(sphere.EmRange) + ' nm')
             plt.xlabel('Wavelength (nm)')
             plt.ylabel('Fluorescence Intensity (AU)')
-        return 1 - (integ_Sphere/integ_Dilute)
+        return w, Uw
