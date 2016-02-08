@@ -117,7 +117,7 @@ class FluorSpecReader():
         return CorrData, UCorrData
     
     def CalculateQY_2MM(self, fluor, solvent, scat_start, scat_end, em_start, em_end, use_solvent_BL=False,
-                        dilute=None, normWL=None, verbose=False):
+                        dilute=None, normWL=None, verbose=False, avglen=4):
         '''
         Calculate QY using 2 measurement method.
 
@@ -141,11 +141,13 @@ class FluorSpecReader():
         Scat_BL_Fluor = self.CalcStraightLine(fluor.WL,
                                               fluor.SpecCorrected,
                                               ScatStartIdx_Fluor,
-                                              ScatEndIdx_Fluor)
+                                              ScatEndIdx_Fluor,
+                                              avglen=avglen)
         Scat_BL_Solvent = self.CalcStraightLine(solvent.WL,
                                               solvent.SpecCorrected,
                                               ScatStartIdx_Solvent,
-                                              ScatEndIdx_Solvent)
+                                              ScatEndIdx_Solvent,
+                                              avglen=avglen)
         if use_solvent_BL:
             #do it assuming same WL range for now.
             Em_BL_Fluor = solvent.SpecCorrected
@@ -153,7 +155,8 @@ class FluorSpecReader():
             Em_BL_Fluor = self.CalcStraightLine(fluor.WL,
                                                 fluor.SpecCorrected,
                                                 EmStartIdx_Fluor,
-                                                EmEndIdx_Fluor)
+                                                EmEndIdx_Fluor,
+                                                avglen=avglen)
 
         N_emitted = sum(np.subtract(fluor.SpecCorrected[EmStartIdx_Fluor:EmEndIdx_Fluor],
                                     Em_BL_Fluor[EmStartIdx_Fluor:EmEndIdx_Fluor]))
@@ -164,10 +167,11 @@ class FluorSpecReader():
         N_Tot_sample = sum(np.subtract(fluor.SpecCorrected[ScatStartIdx_Fluor:ScatEndIdx_Fluor],
                                        Scat_BL_Fluor[ScatStartIdx_Fluor:ScatEndIdx_Fluor]))
         UN_Tot_sample = np.sqrt(sum(np.power(fluor.USpecCorrected[ScatStartIdx_Fluor:ScatEndIdx_Fluor],2)))
-        if((dilute.SpecCorrected is not None) and (dilute is not None)) and (normWL is not None):
-            w, Uw = self.CalcReabsProb(fluor, em_start, em_end,
-                                   dilute.WL.index(np.interp(normWL, dilute.WL, dilute.WL)),
-                                   Em_BL_Fluor, dilute, verbose)
+        if((dilute is not None)) and (normWL is not None):
+            if dilute.SpecCorrected is not None:
+                w, Uw = self.CalcReabsProb(fluor, em_start, em_end,
+                                           dilute.WL.index(np.interp(normWL, dilute.WL, dilute.WL)),
+                                           Em_BL_Fluor, dilute, verbose)
         else:
             w = 0
             Uw = 0
@@ -219,12 +223,12 @@ class FluorSpecReader():
                 ' nm, Emission ' + str(fluor.EmRange) + ' nm')
         return QY, UQY
 
-    def CalcStraightLine(self, WL, spec, startidx, endidx):
-        gradient = (np.mean(spec[(endidx):(endidx+6)]) - np.mean(spec[(startidx-6):(startidx)]))/(WL[endidx+3] - WL[startidx-3])
+    def CalcStraightLine(self, WL, spec, startidx, endidx, avglen=4):
+        gradient = (np.mean(spec[(endidx):(endidx+avglen)]) - np.mean(spec[(startidx-avglen):(startidx)]))/(WL[endidx+int(avglen/2)] - WL[startidx-int(avglen/2)])
         #print('spec[(endidx):(endidx+6)] = {0}, spec[(startidx):(startidx-6)] = {1}, WL[endidx+3] = {2}, WL[startidx-3] = {3}'.format(
          #   spec[(endidx):(endidx+6)], spec[(startidx):(startidx-6)], WL[endidx+3], WL[startidx-3]))
         #gradient = (spec[endidx]-spec[startidx])/(WL[endidx] - WL[startidx])
-        const = np.mean(spec[endidx:(endidx+6)]) - gradient*WL[endidx]
+        const = np.mean(spec[endidx:(endidx+avglen)]) - gradient*WL[endidx]
         #print('gradient = {0}, constant = {1}'.format(gradient, const))
         return np.add(np.multiply(WL,gradient),const)
 
