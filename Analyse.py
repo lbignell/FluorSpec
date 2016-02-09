@@ -42,7 +42,7 @@ class FluorSpecReader():
             return
         return PTI_Data.PTI_Data(self.CorrFiles[key])
 
-    def ApplyCorrFileToRaw(self, data, key, bckgnd=0, extracorr=None, MakePlots=False):
+    def ApplyCorrFileToRaw(self, data, key, bckgnd=0, extracorr=None, MakePlots=False, factor=None):
         '''
         Take raw data as input and return the corrected spectrum.
         
@@ -55,6 +55,8 @@ class FluorSpecReader():
         using synchronous scan data in the form of a PTI_Data object.
         Be sure that the right correction that was applied to the synchronous scan is
         the same as the key argument.
+        *factor* optionally applies a multiplicative factor to the data (for comparing data with different 
+        integration times or sensitivities).
         '''
         if data.FileType.value > 1:
             rawspec = data.Trace
@@ -113,6 +115,9 @@ class FluorSpecReader():
                          label='Corrected with Sync Scan file {0}'.format(
                          extracorr.FilePath))
                 plt.legend()
+        if factor is not None:
+            CorrData = np.multiply(CorrData, factor)
+            UCorrData = np.multiply(UCorrData, factor)
         data.RegisterCorrSpec(CorrData,UCorrData)
         return CorrData, UCorrData
     
