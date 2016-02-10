@@ -4,15 +4,10 @@ Code for handling the PTI Fluorescence Spectrometer data analysis.
 Some of this code borrows from David's github repository: https://github.com/davidjaffe/QY
 '''
 
-import sys
-import os
 import numpy as np
-from ROOT import TH1D, TFile, gROOT, TCanvas, TGraph, TLegend, TGraphErrors, gStyle
-from enum import Enum
 import PTI_Data
 import matplotlib.pyplot as plt
 import time
-import math
 
 class FluorSpecReader():
     '''
@@ -68,6 +63,9 @@ class FluorSpecReader():
             print("Analyse.ApplyCorrFileToRaw ERROR!! Bad file")
             return
         CorrData = None
+        if factor is not None:
+            rawspec = np.multiply(rawspec, factor)
+            bckgnd = np.multiply(bckgnd, factor)
         if key is not 'default':
             corr = self.GetCorrData(key)
             if corr is None:
@@ -115,9 +113,6 @@ class FluorSpecReader():
                          label='Corrected with Sync Scan file {0}'.format(
                          extracorr.FilePath))
                 plt.legend()
-        if factor is not None:
-            CorrData = np.multiply(CorrData, factor)
-            UCorrData = np.multiply(UCorrData, factor)
         data.RegisterCorrSpec(CorrData,UCorrData)
         return CorrData, UCorrData
     
