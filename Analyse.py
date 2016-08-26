@@ -5,9 +5,10 @@ Some of this code borrows from David's github repository: https://github.com/dav
 '''
 
 import numpy as np
-import PTI_Data
+import FluorSpec.PTI_Data
 import matplotlib.pyplot as plt
 import time
+import os
 
 class FluorSpecReader():
     '''
@@ -22,6 +23,8 @@ class FluorSpecReader():
                  'excorr':'correction_data\\excorr.txt',
                  'default':None}    
 
+    Basepath = 'C:\\Users\\lbignell\\Documents\\GitHub\\FluorSpec\\'
+
     def __init__(self):
         print("Initializing FluorSpecReader at {0}".format(time.asctime(time.localtime())))
         pass
@@ -35,14 +38,20 @@ class FluorSpecReader():
         if key not in self.CorrFiles:
             print('ERROR!! Incorrect choice of correction file.')
             return
-        return PTI_Data.PTI_Data(self.CorrFiles[key])
+        return FluorSpec.PTI_Data.PTI_Data(self.Basepath + self.CorrFiles[key])
 
-    def ApplyCorrFileToRaw(self, data, key, bckgnd=0, extracorr=None, MakePlots=False, factor=None):
+    def ApplyEmCorrFileToCorr(self, data, corrx, corry):
+        '''
+        Take raw data and apply simple correction to it.
+        '''
+        pass
+
+    def ApplyCorrFileToRaw(self, data, key, bckgnd=0, extracorr=None, 
+                           MakePlots=False, factor=None, crashonerror=True):
         '''
         Take raw data as input and return the corrected spectrum.
         
         Arguments:
-        Raw spectrum as list.
         PTI_Data object for data.
         key may be 'emcorri', 'emcorr-sphere', 'emcorr-sphere-quanta', or 'excorr'.
         bckgnd is the background (list) to be subtracted from the raw data.
@@ -53,10 +62,10 @@ class FluorSpecReader():
         *factor* optionally applies a multiplicative factor to the data (for comparing data with different 
         integration times or sensitivities).
         '''
-        if data.FileType.value > 1:
+        if data.FileType.value > 2:
             rawspec = data.Trace
             uspec = data.UTrace
-        elif data.FileType.value == 1:
+        elif data.FileType.value == 2:
             rawspec = data.SpecRaw
             uspec = data.USpecRaw
         else:
@@ -73,11 +82,14 @@ class FluorSpecReader():
                 return
             if data.RunType.value!=corr.RunType.value:
                 print('ERROR!! The correction type doesn\'t match the data type.')
-                return
+                print('Correction type = {0}, data type = {1}'
+                        .format(corr.RunType, data.RunType))
+                if crashonerror:
+                    return
             CorrVals = np.interp(data.WL, corr.WL, corr.Trace, left=0, right=0)
         else:
             CorrVals = [1 for i in len(rawspec)]
-            
+
         CorrData = np.multiply(np.subtract(rawspec, bckgnd),
                                CorrVals)
         Ubckgnd = np.sqrt(bckgnd)
@@ -94,7 +106,8 @@ class FluorSpecReader():
         if extracorr is not None:
             if extracorr.RunType.name!='Synchronous':
                 print('ERROR!! The extracorr run type is not synchronous!')
-                return
+                if crashonerror:
+                    return
             #The mess below corrects for the measured difference between the sphere
             #response and the file correction, as well as its uncertainty.
             extracorr_vals = np.interp(data.WL, extracorr.WL, extracorr.Spec)

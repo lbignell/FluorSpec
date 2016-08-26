@@ -19,7 +19,7 @@ class PTI_Data:
             print("ERROR!! File does not exist.")
             self.SuccessfullyRead = False            
             return
-        with file(self.FilePath, 'r') as thefile:
+        with open(self.FilePath, 'r') as thefile:
             firstline = thefile.readline()
             if '<Session>' in firstline:
                 self.FileType = self.FileTypes.Session
@@ -40,6 +40,8 @@ class PTI_Data:
             self.SpecRaw = [0]*self.NumSamples
             self.USpecRaw = [0]*self.NumSamples
             self.ExCorr = [0]*self.NumSamples #Note ExCorr here is the photodiode signal.
+            self.FileSpecCorrected = [0]*self.NumSamples
+            self.UFileSpecCorrected = [0]*self.NumSamples
         elif self.FileType.value > 1:
             self.Trace = [0]*self.NumSamples
             self.UTrace = [0]*self.NumSamples
@@ -70,7 +72,7 @@ class PTI_Data:
         - Run type (from RunTypes enum).
         '''
         #Read the header info to determine the run type
-        with file(self.FilePath, 'r') as thefile:
+        with open(self.FilePath, 'r') as thefile:
             if self.FileType == self.FileTypes.Session:
                 success = self._ReadHdrSession(thefile)
             elif self.FileType == self.FileTypes.Trace:
@@ -180,22 +182,30 @@ class PTI_Data:
         return
         
     def _ReadSessionData(self):
-        with file(self.FilePath, 'r') as thefile:
+        NoCorr = False
+        with open(self.FilePath, 'r') as thefile:
             for i, line in enumerate(thefile):
                 if i > 7 and i < (8 + self.NumSamples):
                     wrds = line.split()
                     self.WL[i-8] = float(wrds[0])
                     self.SpecRaw[i-8] = float(wrds[1])
                     self.USpecRaw[i-8] = abs(float(wrds[1]))**(0.5)
-                    self.Spec[i-8] = float(wrds[3])
+                    self.FileSpecCorrected[i-8] = float(wrds[-1])
+                    self.UFileSpecCorrected[i-8] = abs(float(wrds[-1]))**(0.5)
+                    try:
+                        self.Spec[i-8] = float(wrds[3])
+                    except IndexError:
+                        NoCorr = True
                 elif i > (8 + self.NumSamples + 7) and \
                    i < (8 + self.NumSamples + 7 + self.NumSamples):
                     wrds = line.split()
                     self.ExCorr[i-(8+self.NumSamples+7)] += float(wrds[1])
+        if NoCorr:
+            print("Warning: No Corrected Spectrum was found in this session file!")
         return
 
     def _ReadTraceData(self):
-        with file(self.FilePath, 'r') as thefile:
+        with open(self.FilePath, 'r') as thefile:
             for i, line in enumerate(thefile):
                 if i > 3 and i < (4 + self.NumSamples):
                     wrds = line.split()
@@ -205,7 +215,7 @@ class PTI_Data:
         return
 
     def _ReadGroupData(self):
-        with file(self.FilePath, 'r') as thefile:
+        with open(self.FilePath, 'r') as thefile:
             for i, line in enumerate(thefile):
                 if i > 5 and i < (6 + self.NumSamples):
                     wrds = line.split()
